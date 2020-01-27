@@ -1,0 +1,169 @@
+master:
+  tag: lts-jdk11
+  serviceType: NodePort
+  slaveListenerPort: 31000
+  slaveListenerServiceType: NodePort
+  jenkinsUriPrefix: /jenkins
+  jenkinsUrl: http://localhost/jenkins
+  jenkinsAdminEmail: rainer.frey@inxmail.de
+  javaOpts: "-Dhudson.slaves.NodeProvisioner.initialDelay=0 -Djava.security.egd=file:/dev/./urandom -Dio.jenkins.plugins.casc.ConfigurationAsCode.initialDelay=5000"
+  adminUser: admin
+  numExecutors: 1
+  enableXmlConfig: true
+  csrf:
+    defaultCrumbIssuer:
+      enabled: false
+  disabledAgentProtocols:
+    - JNLP-connect
+    - JNLP2-connect
+    - JNLP3-connect
+  containerEnv:
+    - name: SECRETS
+      value: /usr/share/jenkins/ref/secrets
+    - name: TZ
+      value: Europe/Berlin
+  JCasC:
+    enabled: true
+    defaultConfig: false
+    pluginVersion: "1.35"
+    configScripts:
+      welcome-message: |
+        jenkins:
+          systemMessage: |
+            <h2>Willkommen zum X-Celerate Jenkins</h2>
+            <p><strong>Zur Demonstration von Jenkins auf Kubernetes</strong>.
+            <p>Diese Jenkins-Umgebung wird automatisch konfiguriert.</p>
+      basic-settings: |
+        jenkins:
+          markupFormatter:
+            rawHtml:
+              disableSyntaxHighlighting: false
+      auth-settings: |
+        jenkins:
+          disableRememberMe: false
+      git-scm-settings: |
+        unclassified:
+          gitscm:
+            globalConfigName: jenkins
+            globalConfigEmail: jenkins@inxmail.de
+            createAccountBasedOnEmail: false
+      kubernetes-cloud-settings: |
+        credentials:
+          system:
+            domainCredentials:
+              - credentials:
+                  - fileSystemServiceAccountCredential:
+                      id: "kubernetes-service-accounts"
+        jenkins:
+          clouds:
+          - kubernetes:
+              containerCapStr: "10"
+              credentialsId: "kubernetes-service-accounts"
+              jenkinsTunnel: "xcelerate-jenkins-agent:31000"
+              jenkinsUrl: "http://xcelerate-jenkins:8080/jenkins"
+              maxRequestsPerHostStr: "32"
+              name: "kubernetes"
+              namespace: "build"
+              serverUrl: "https://kubernetes.default"
+              defaultsProviderTemplate: default
+              templates:
+              - name: "default"
+                containers:
+                - args: "^${computer.jnlpmac} ^${computer.name}"
+                  image: "jenkins/jnlp-slave:latest-jdk11"
+                  name: "jnlp"
+                  resourceLimitCpu: "250m"
+                  resourceLimitMemory: "512Mi"
+                  resourceRequestCpu: "100m"
+                  resourceRequestMemory: "192Mi"
+                  workingDir: "/home/jenkins/agent"
+                  alwaysPullImage: true
+                label: "xcelerate-jenkins-slave"
+                name: "default"
+                nodeUsageMode: EXCLUSIVE
+                podRetention: "never"
+                yamlMergeStrategy: "merge"
+              - name: "docker"
+                containers:
+                - image: "docker:dind"
+                  name: "docker"
+                  args: "--mtu=1300"
+                  privileged: true
+                  resourceLimitCpu: "250m"
+                  resourceLimitMemory: "512Mi"
+                  resourceRequestCpu: "100m"
+                  resourceRequestMemory: "256Mi"
+                  workingDir: "/home/jenkins/agent"
+                  envVars:
+                    - envVar:
+                        key: DOCKER_TLS_CERTDIR
+                        value: ""
+                  ttyEnabled: true
+                volumes:
+                  - secretVolume:
+                      secretName: jenkins-docker-credentials
+                      mountPath: /root/.docker
+                yamlMergeStrategy: "merge"
+      timestamper-settings: |
+        unclassified:
+          timestamperConfig:
+            allPipelines: true
+            elapsedTimeFormat: "'<b>'HH:mm:ss.SSS'</b> '"
+            systemTimeFormat: "'<b>'HH:mm:ss.SSS'</b> '"
+  sidecars:
+    configAutoReload:
+      enabled: true
+      resources:
+        limits:
+          cpu: 100m
+          memory: 100Mi
+        requests:
+          cpu: 50m
+          memory: 50Mi
+  installPlugins:
+    - command-launcher:latest
+    - external-monitor-job:latest
+    - ldap:latest
+    - jdk-tool:latest
+    - pam-auth:latest
+    - windows-slaves:latest
+    - antisamy-markup-formatter:latest
+    - bouncycastle-api:latest
+    - kubernetes:1.23.1
+    - kubernetes-credentials-provider:latest
+    - kubernetes-cli:latest
+    - role-strategy:latest
+    - workflow-aggregator:latest
+    - workflow-job:latest
+    - workflow-multibranch:latest
+    - git:latest
+    - blueocean:latest
+    - pipeline-utility-steps:latest
+    - greenballs:latest
+    - jaxb:latest
+    - email-ext:latest
+    - timestamper:latest
+  overwritePlugins: true
+  resources:
+    requests:
+      cpu: "1"
+      memory: "1024Mi"
+    limits:
+      cpu: "2000m"
+      memory: "4096Mi"
+  healthProbeLivenessInitialDelay: 300
+  healthProbeReadinessInitialDelay: 120
+
+agent:
+  tag: latest-jdk11
+  containerCap: 10
+  resources:
+    limits:
+      cpu: "1"
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 192Mi
+persistence:
+  size: 20Gi
+  accessMode: ReadWriteMany
